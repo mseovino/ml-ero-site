@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ML ERO Map</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root {
+  --bg: #eef0f3; --card: rgba(255,255,255,0.97); --text: #16191d; --muted: #616a75; --faint: #8a929c; --line: #e1e4e8;
+  --accent: #2557d6; --accent-soft: #e8eefc; --chip: #f3f5f7; --warn: #8a5a00; --warn-bg: #fff4d6; --hatch: #2a46c8;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 6px 20px rgba(16,24,40,.10); --radius: 12px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1215; --card: rgba(23,27,32,0.97); --text: #e7eaee; --muted: #a0a9b4; --faint: #77808b; --line: #2c333b;
+    --accent: #8cadff; --accent-soft: #1f2a44; --chip: #20262d; --warn: #f2d38a; --warn-bg: #3a2f17; --hatch: #a9b9ff;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.45);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1215; --card: rgba(23,27,32,0.97); --text: #e7eaee; --muted: #a0a9b4; --faint: #77808b; --line: #2c333b;
+  --accent: #8cadff; --accent-soft: #1f2a44; --chip: #20262d; --warn: #f2d38a; --warn-bg: #3a2f17; --hatch: #a9b9ff;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.45);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+  font: 13.5px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+#map { position: absolute; inset: 0; background: var(--bg); }
+.leaflet-container { font: inherit; background: var(--bg); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
+  backdrop-filter: blur(6px); }
+.top { position: absolute; z-index: 1000; top: 10px; left: 10px; right: 10px; display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px; flex-wrap: wrap; }
+.brand { display: flex; flex-direction: column; line-height: 1.15; margin-right: 4px; }
+.brand b { font-size: 14px; letter-spacing: -.01em; }
+.brand span { font-size: 11px; color: var(--faint); }
+select { padding: 5px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); font: inherit; }
+.seg { display: flex; background: var(--chip); border-radius: 9px; padding: 3px; gap: 2px; overflow-x: auto; }
+.seg button { border: 0; background: transparent; color: var(--muted); border-radius: 7px; padding: 4px 10px; font: inherit;
+  cursor: pointer; line-height: 1.1; white-space: nowrap; }
+.seg button small { display: block; font-size: 10.5px; color: var(--faint); }
+.seg button.on { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); font-weight: 600; }
+.seg button.on small { color: var(--muted); }
+.seg button:disabled { opacity: .35; cursor: default; }
+.spacer { flex: 1; }
+.pill { font-size: 11.5px; color: var(--warn); background: var(--warn-bg); border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
+.pill a { color: inherit; }
+.layers { position: absolute; z-index: 1000; top: 76px; left: 10px; width: 292px; max-height: calc(100% - 200px); overflow: auto; padding: 12px 14px; }
+.sec { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin: 12px 0 6px; }
+.sec:first-child { margin-top: 0; }
+.layers select { width: 100%; }
+.sw-row { display: flex; align-items: center; gap: 9px; padding: 5px 0; cursor: pointer; user-select: none; }
+.sw-row .lbl { flex: 1; }
+.sw-row .n { color: var(--faint); font-size: 11.5px; }
+.sw-row.dis { opacity: .4; cursor: default; }
+.switch { position: relative; width: 30px; height: 18px; flex: none; }
+.switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.switch i { position: absolute; inset: 0; background: var(--line); border-radius: 999px; transition: .15s; }
+.switch i::after { content: ""; position: absolute; left: 2px; top: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: .15s; }
+.switch input:checked + i { background: var(--accent); }
+.switch input:checked + i::after { left: 14px; }
+.cyc { display: flex; gap: 4px; margin: 2px 0 4px 39px; flex-wrap: wrap; }
+.cyc button { border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 6px; padding: 1px 7px;
+  font: inherit; font-size: 11.5px; cursor: pointer; }
+.cyc button.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.op { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; margin-top: 8px; }
+.op input { flex: 1; accent-color: var(--accent); }
+.status { font-size: 11.5px; color: var(--muted); margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.status p { margin: 0 0 4px; }
+.legend { position: absolute; z-index: 1000; left: 10px; bottom: 26px; padding: 9px 12px; min-width: 300px; max-width: min(560px, calc(100% - 20px)); }
+.legend .t { font-size: 11.5px; color: var(--muted); margin-bottom: 5px; }
+.bar { display: flex; border-radius: 4px; overflow: hidden; height: 10px; }
+.bar span { flex: 1; }
+.ticks { display: flex; font-size: 10.5px; color: var(--faint); margin-top: 3px; }
+.ticks span { flex: 1; text-align: center; white-space: nowrap; }
+.keys { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11.5px; color: var(--muted); margin-top: 7px; }
+.keys:empty { display: none; }
+.k { display: inline-flex; align-items: center; gap: 5px; }
+.ksw { width: 14px; height: 10px; border-radius: 2px; }
+.kln { width: 16px; height: 0; border-top: 3px solid; border-radius: 2px; }
+.ssw { border: 1.5px dashed var(--warn); background: transparent; }
+#readout .sup { color: var(--warn); background: var(--warn-bg); border-radius: 6px; padding: 6px 8px; margin-top: 6px; font-size: 11.5px; line-height: 1.4; }
+#readout .sup b { display: block; margin-bottom: 2px; }
+.hsw { background: repeating-linear-gradient(45deg, var(--hatch) 0 2px, transparent 2px 5px); border: 1px solid var(--hatch); }
+#readout { position: absolute; z-index: 1000; right: 10px; bottom: 26px; width: 300px; max-height: calc(100% - 150px); overflow: auto; padding: 10px 12px; display: none; font-size: 12.5px; }
+#readout .h { font-weight: 600; margin-bottom: 2px; }
+#readout .h small { font-weight: 400; color: var(--faint); margin-left: 6px; }
+#readout .g { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin: 7px 0 2px; }
+#readout table { width: 100%; border-collapse: collapse; }
+#readout td { padding: 1.5px 0; }
+#readout td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+.tag { display: inline-block; min-width: 38px; text-align: center; padding: 0 5px; border-radius: 4px; font-size: 11px; font-weight: 600; color: #111; margin-left: 4px; }
+.none { color: var(--faint); margin-left: 6px; }
+.rule { color: var(--hatch); font-weight: 600; }
+.toggle { display: none; }
+.leaflet-top.leaflet-right { top: 64px; }
+.leaflet-bar { border: 1px solid var(--line) !important; box-shadow: var(--shadow) !important; border-radius: 10px !important; overflow: hidden; }
+@media (max-width: 760px) {
+  .top { gap: 6px; padding: 6px 8px; }
+  .brand span, .pill .long { display: none; }
+  .seg { order: 5; width: 100%; }
+  .layers { top: auto; bottom: 0; left: 0; right: 0; width: auto; max-height: 55%; border-radius: 14px 14px 0 0; display: none; z-index: 1002; }
+  .layers.open { display: block; }
+  .toggle { display: inline-block; border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 8px; padding: 5px 10px; font: inherit; }
+  .legend { bottom: 22px; max-width: calc(100% - 20px); }
+  #readout { left: 10px; right: 10px; width: auto; bottom: 96px; max-height: 42%; }
+  .leaflet-top.leaflet-right { top: 104px; }
+}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="top card">
+  <div class="brand"><b>ML ERO first guess</b><span id="built">Loading...</span></div>
+  <select id="run" aria-label="Run"></select>
+  <div class="seg" id="days"></div>
+  <div class="spacer"></div>
+  <button class="toggle" id="toggle">Layers</button>
+  <div class="pill">Experimental<span class="long"> - not an official NWS/WPC product</span> &middot; <a href="../index.html">viewer</a></div>
+</div>
+<div class="layers card" id="panel">
+  <div class="sec">Shown as fill</div>
+  <select id="base" aria-label="Filled field"></select>
+  <div class="op">Opacity <input type="range" id="op" min="0.25" max="1" step="0.05" value="0.75"></div>
+  <div class="sec">Overlays</div>
+  <label class="sw-row" id="o-capped"><span class="switch"><input type="checkbox" id="capped"><i></i></span><span class="lbl">Low-CAPE rule cells</span><span class="n" id="n-capped"></span></label>
+  <label class="sw-row" id="o-sup"><span class="switch"><input type="checkbox" id="sup"><i></i></span><span class="lbl">Limited calibration support</span><span class="n" id="n-sup"></span></label>
+  <label class="sw-row" id="o-fgl"><span class="switch"><input type="checkbox" id="fgl"><i></i></span><span class="lbl">First-guess outlines</span></label>
+  <label class="sw-row" id="o-wpc"><span class="switch"><input type="checkbox" id="wpc"><i></i></span><span class="lbl">WPC outlook</span></label>
+  <div class="cyc" id="cyc"></div>
+  <label class="sw-row" id="o-obs"><span class="switch"><input type="checkbox" id="obs"><i></i></span><span class="lbl">Verification (observed)</span></label>
+  <div class="status" id="status"></div>
+</div>
+<div class="legend card" id="legend"></div>
+<div id="readout" class="card"></div>
+<script>
+const PROB = { levels: [0.05, 0.15, 0.25, 0.40, 0.55, 0.70, 1.01], colors: ["#3fcf3f", "#f2ec3a", "#f0a650", "#f04a43", "#a8403c", "#e64be0"] };
+const PAL = {
+  prob: PROB.colors,
+  qpf: ["#c7e9c0", "#74c476", "#31a354", "#2b8cbe", "#08589e", "#6a51a3", "#c51b8a"],
+  seq: ["#deebf7", "#9ecae1", "#4292c6", "#2171b5", "#08306b"],
+  ratio: ["#fee5d9", "#fcae91", "#fb6a4a", "#de2d26", "#a50f15"],
+  ffg: ["#b2182b", "#ef8a62", "#fddbc7", "#d1e5f0", "#67a9cf", "#2166ac"],
+  cape: ["#fff5eb", "#fdd0a2", "#fdae6b", "#fd8d3c", "#e6550d", "#a63603"],
+  pw: ["#edf8e9", "#c7e9c0", "#a1d99b", "#74c476", "#31a354", "#006d2c"],
+  div: ["#2166ac", "#67a9cf", "#d1e5f0", null, "#fddbc7", "#ef8a62", "#b2182b"],
+  wet: ["#c6dbef", "#6baed6", "#2171b5", "#08306b"],
+};
+const WETL = [1.5, 2, 3, 5, 1e9];
+const CATN = ["none", "MRGL", "SLGT", "MDT", "HIGH"];
+const CCOL = [null, "#2e9e2e", "#d4a800", "#d62728", "#c31fc0"];
+const TAGC = [null, "#8fd18f", "#f2e35e", "#e5534b", "#e043d1"];
+const $ = id => document.getElementById(id);
+const S = { run: null, day: 1, base: "fg", capped: true, sup: true, fgl: false, wpc: true, cyc: null, obs: true, op: 0.75 };
+let RUNS = [], DATA = null, grids = {}, layers = [];
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+function readHash() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.get("run")) S.run = h.get("run");
+  if (h.get("day")) S.day = +h.get("day");
+  if (h.get("base")) S.base = h.get("base");
+  for (const k of ["capped", "sup", "fgl", "wpc", "obs"]) if (h.has(k)) S[k] = h.get(k) === "1";
+  if (h.get("cyc")) S.cyc = h.get("cyc");
+  if (h.get("v")) { const v = h.get("v").split(",").map(Number); if (v.length === 3 && v.every(isFinite)) S.view = v; }
+}
+function writeHash() {
+  const c = map.getCenter();
+  const h = new URLSearchParams({ run: S.run, day: S.day, base: S.base, capped: +S.capped, sup: +S.sup, fgl: +S.fgl, wpc: +S.wpc, obs: +S.obs,
+    cyc: S.cyc || "", v: [c.lat.toFixed(2), c.lng.toFixed(2), map.getZoom()].join(",") });
+  history.replaceState(null, "", "#" + h.toString());
+}
+
+const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+const map = L.map("map", { zoomSnap: 0.25, zoomControl: false, minZoom: 3, maxZoom: 10 });
+L.control.zoom({ position: "topright" }).addTo(map);
+L.control.scale({ position: "bottomright", metric: false, maxWidth: 110 }).addTo(map);
+map.attributionControl.setPrefix('<a href="https://leafletjs.com">Leaflet</a>');
+map.createPane("labels"); map.getPane("labels").style.zIndex = 650; map.getPane("labels").style.pointerEvents = "none";
+const tile = k => `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_${dark ? "Dark" : "Light"}_Gray_${k}/MapServer/tile/{z}/{y}/{x}`;
+L.tileLayer(tile("Base"), { attribution: "Basemap &copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors", maxNativeZoom: 16 }).addTo(map);
+L.tileLayer(tile("Reference"), { pane: "labels", maxNativeZoom: 16, opacity: 0.9 }).addTo(map);
+readHash();
+if (S.view) map.setView([S.view[0], S.view[1]], S.view[2]);
+else if (matchMedia("(max-width: 760px)").matches) map.setView([37.5, -96.5], 3.25);
+else map.fitBounds([[24, -125], [50, -66]], { paddingTopLeft: [300, 70], paddingBottomRight: [10, 60] });
+map.on("moveend", () => { if (DATA) writeHash(); });
+const svgR = L.svg({ padding: 0.5 }).addTo(map);
+(() => {  // hatch pattern for the low-CAPE rule cells
+  const NS = "http://www.w3.org/2000/svg", defs = document.createElementNS(NS, "defs"), pat = document.createElementNS(NS, "pattern");
+  pat.setAttribute("id", "hatch"); pat.setAttribute("width", "6"); pat.setAttribute("height", "6");
+  pat.setAttribute("patternUnits", "userSpaceOnUse"); pat.setAttribute("patternTransform", "rotate(45)");
+  const ln = document.createElementNS(NS, "line");
+  for (const [a, v] of [["x1", 0], ["y1", 0], ["x2", 0], ["y2", 6], ["stroke-width", 2]]) ln.setAttribute(a, v);
+  ln.setAttribute("stroke", css("--hatch")); pat.appendChild(ln); defs.appendChild(pat);
+  svgR._container.insertBefore(defs, svgR._container.firstChild);
+})();
+
+function dec(b) { const s = atob(b), a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; }
+function catOf(p) { return p >= 70 ? 4 : p >= 40 ? 3 : p >= 15 ? 2 : p >= 5 ? 1 : 0; }
+function tag(c) { return c ? `<span class="tag" style="background:${TAGC[c]}">${CATN[c]}</span>` : `<span class="none">none</span>`; }
+function fmtDate(s, long) { const d = new Date(s + "T12:00:00Z"); return d.toLocaleDateString("en-US", long ? { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" } : { weekday: "short", day: "numeric", timeZone: "UTC" }); }
+function fmt(sp, v) {
+  if (v == null || !isFinite(v)) return "-";
+  switch (sp.fmt) {
+    case "pct": return `${Math.round(v * 100)}%`;
+    case "in": return `${v.toFixed(2)}"`;
+    case "x": return `${v.toFixed(2)}x`;
+    case "int": return `${Math.round(v)}`;
+    case "pp": return `${v > 0 ? "+" : ""}${Math.round(v * 100)} pts`;
+  }
+  return `${v}`;
+}
+function ruleText(D) { return D.capped && D.capped.rule === "d2b" ? "limited to Slight (D2b, doctrine - not validated)" : "capped to 14%"; }
+
+function baseOptions(D) {
+  const opts = [["Outlook", [["fg", "First guess", true], ["pre", "Model before low-CAPE rule", !!D.pre]]]];
+  const sp = DATA.specs || {}, f = D.fields || {};
+  const groups = {};
+  for (const [k, s] of Object.entries(sp)) (groups[s.group] = groups[s.group] || []).push([k, s.label, !!f[k]]);
+  if (groups.Outlook) opts[0][1].push(...groups.Outlook);
+  for (const g of ["Rainfall guidance", "Hydrology & instability"]) if (groups[g]) opts.push([g, groups[g]]);
+  opts.push(["Context", [["wet", "30-day rain vs normal (antecedent)", !!DATA.wet], ["none", "None", true]]]);
+  return opts;
+}
+
+async function loadRuns() {
+  const r = await fetch("inits.json", { cache: "no-store" }).then(x => x.json());
+  RUNS = r.runs;
+  $("run").innerHTML = RUNS.map(x => `<option value="${x.init}">${x.init.slice(4, 6)}/${x.init.slice(6)} 00Z run</option>`).join("");
+  if (!RUNS.find(x => x.init === S.run)) S.run = RUNS.length ? RUNS[0].init : null;
+  $("run").value = S.run;
+  $("built").textContent = `updated ${r.built}`;
+  if (S.run) await loadRun();
+}
+async function loadRun() {
+  DATA = await fetch(`${S.run}.json`, { cache: "no-store" }).then(x => x.json());
+  const ds = Object.keys(DATA.days).map(Number);
+  if (!ds.includes(S.day)) S.day = ds.length ? Math.min(...ds) : 1;
+  $("days").innerHTML = [1, 2, 3, 4, 5].map(d => {
+    const v = DATA.days[d];
+    return `<button data-d="${d}" ${v ? "" : "disabled"}>Day ${d}<small>${v ? fmtDate(v.valid) : "-"}</small></button>`;
+  }).join("");
+  $("days").querySelectorAll("button").forEach(b => b.onclick = () => { S.day = +b.dataset.d; draw(); });
+  draw();
+}
+
+function specOf(key) {
+  if (key === "fg" || key === "pre") return { levels: PROB.levels, colors: PROB.colors, fmt: "pct", label: key === "fg" ? "First guess" : "Model before low-CAPE rule" };
+  if (key === "wet") return { levels: WETL, colors: PAL.wet, fmt: "x", label: "30-day rain vs normal" };
+  const s = DATA.specs[key]; return { ...s, colors: PAL[s.pal] };
+}
+function bandsOf(D, key) {
+  if (key === "fg") return D.fg.bands;
+  if (key === "pre") return D.pre && D.pre.bands;
+  if (key === "wet") return DATA.wet && DATA.wet.bands;
+  return D.fields && D.fields[key] && D.fields[key].bands;
+}
+
+function draw() {
+  layers.forEach(l => map.removeLayer(l)); layers = [];
+  const D = DATA.days[S.day]; if (!D) return;
+  $("days").querySelectorAll("button").forEach(b => b.classList.toggle("on", +b.dataset.d === S.day));
+  grids = { fg: dec(D.fg.grid), pre: D.pre ? dec(D.pre.grid) : null, cap: D.capped ? dec(D.capped.grid) : null, sup: D.support ? dec(D.support.grid) : null,
+            obs: D.obs ? dec(D.obs.grid) : null, wet: DATA.wet ? dec(DATA.wet.grid) : null, wetmm: DATA.wet ? dec(DATA.wet.mm) : null, wpc: {}, f: {} };
+  for (const [k, v] of Object.entries(D.fields || {})) grids.f[k] = dec(v.grid);
+  const cycs = Object.keys(D.wpc || {});
+  for (const c of cycs) grids.wpc[c] = dec(D.wpc[c].grid);
+  if (!cycs.includes(S.cyc)) S.cyc = cycs.length ? cycs[cycs.length - 1] : null;
+  const opts = baseOptions(D);
+  const avail = new Set(opts.flatMap(([, xs]) => xs.filter(x => x[2]).map(x => x[0])));
+  if (!avail.has(S.base)) S.base = "fg";
+  $("base").innerHTML = opts.map(([g, xs]) => `<optgroup label="${g}">${xs.map(([k, l, ok]) => `<option value="${k}" ${ok ? "" : "disabled"}>${l}${ok ? "" : " (n/a)"}</option>`).join("")}</optgroup>`).join("");
+  $("base").value = S.base;
+  const setOpt = (id, ok) => { $(id).disabled = !ok; $("o-" + id).classList.toggle("dis", !ok); $(id).checked = ok && S[id]; };
+  setOpt("capped", !!D.capped); setOpt("sup", !!(D.support && D.support.n)); setOpt("fgl", true); setOpt("wpc", cycs.length > 0); setOpt("obs", !!D.obs);
+  $("n-capped").textContent = D.capped ? `${D.capped.n}` : "";
+  $("n-sup").textContent = D.support ? `${D.support.n}` : "";
+  $("cyc").innerHTML = cycs.map(c => `<button data-c="${c}" class="${c === S.cyc ? "on" : ""}">${c}</button>`).join("");
+  $("cyc").style.display = S.wpc && cycs.length ? "flex" : "none";
+  $("cyc").querySelectorAll("button").forEach(b => b.onclick = () => { S.cyc = b.dataset.c; draw(); });
+  if (S.base !== "none") {
+    const sp = specOf(S.base), feats = bandsOf(D, S.base) || [];
+    const outline = S.base === "fg" || S.base === "pre";
+    layers.push(L.geoJSON({ type: "FeatureCollection", features: feats }, { renderer: svgR, interactive: false,
+      style: f => ({ fillColor: sp.colors[f.properties.band] || "transparent", fillOpacity: S.op, color: outline ? "rgba(0,0,0,0.32)" : "transparent", weight: outline ? 0.6 : 0 }) }));
+  }
+  if (S.fgl) layers.push(L.geoJSON({ type: "FeatureCollection", features: D.fg.lines }, { renderer: svgR, interactive: false,
+    style: f => ({ fill: false, color: dark ? "#f2f2f2" : "#1d1f22", weight: f.properties.cat >= 3 ? 2 : 1.4, dashArray: f.properties.cat === 1 ? "4 3" : null, opacity: 0.85 }) }));
+  if (S.capped && D.capped) layers.push(L.geoJSON({ type: "FeatureCollection", features: D.capped.cells }, { renderer: svgR, interactive: false,
+    style: { fillColor: "url(#hatch)", fillOpacity: 1, color: css("--hatch"), weight: 1 } }));
+  if (S.sup && D.support && D.support.n) layers.push(L.geoJSON({ type: "FeatureCollection", features: D.support.cells }, { renderer: svgR, interactive: false,
+    style: { fill: false, color: css("--warn"), weight: 2.6, dashArray: "6 4", opacity: 0.95 } }));
+  if (S.wpc && S.cyc) {
+    const feats = { type: "FeatureCollection", features: D.wpc[S.cyc].lines };
+    layers.push(L.geoJSON(feats, { renderer: svgR, interactive: false, style: { fill: false, color: dark ? "#0f1215" : "#ffffff", weight: 5, opacity: 0.9 } }));
+    layers.push(L.geoJSON(feats, { renderer: svgR, interactive: false, style: f => ({ fill: false, color: CCOL[f.properties.cat], weight: 2.4, opacity: 1 }) }));
+  }
+  if (S.obs && D.obs) layers.push(L.geoJSON({ type: "FeatureCollection", features: D.obs.points }, { renderer: svgR, interactive: false,
+    pointToLayer: (f, ll) => L.circleMarker(ll, { renderer: svgR, radius: 3.2, weight: 1, color: dark ? "#0f1215" : "#ffffff", fillColor: dark ? "#f2f2f2" : "#16191d", fillOpacity: 0.9 }) }));
+  layers.forEach(l => l.addTo(map));
+  legend(D);
+  const st = [];
+  if (D.meta) st.push(`<p><b>Low-CAPE rule:</b> ${D.meta}.</p>`);
+  if (D.support && D.support.n) st.push(`<p><b>Limited calibration support:</b> ${D.support.n} cells where the recent sample behind the final calibration is thin or today's probability is above anything in it (display only; probabilities and categories unchanged).</p>`);
+  if (D.pre && D.pre.source !== "run") st.push(`<p>Pre-rule field ${D.pre.source}.</p>`);
+  if (D.obs) st.push(`<p><b>Verification:</b> ${D.obs.source}.</p>`);
+  if (S.base === "wet" && DATA.wet) st.push(`<p>${DATA.wet.note}.</p>`);
+  if (S.base === "chg") st.push(`<p>First guess minus the previous run's first guess for the same valid day.</p>`);
+  $("status").innerHTML = st.join("") || "<p>-</p>";
+  writeHash();
+}
+
+function legend(D) {
+  let html = "";
+  if (S.base !== "none") {
+    const sp = specOf(S.base);
+    const idx = sp.colors.map((c, i) => i).filter(i => sp.colors[i]);
+    const f = v => fmt({ fmt: sp.fmt }, v);
+    const lab = i => S.base === "chg" ? (sp.levels[i] < 0 ? `${f(sp.levels[i + 1])}` : `${f(sp.levels[i])}`) : f(sp.levels[i]);
+    const unit = sp.unit === "in" ? " (in)" : sp.unit === "J/kg" ? " (J/kg)" : sp.unit === "x FFG" ? " (x FFG)" : "";
+    html += `<div class="t">${sp.label}${unit}</div>`;
+    html += `<div class="bar">${idx.map(i => `<span style="background:${sp.colors[i]}"></span>`).join("")}</div>`;
+    html += `<div class="ticks">${idx.map(i => `<span>${lab(i)}</span>`).join("")}</div>`;
+  }
+  const keys = [];
+  if (S.capped && D.capped) keys.push(`<span class="k"><span class="ksw hsw"></span>${ruleText(D)}</span>`);
+  if (S.sup && D.support && D.support.n) keys.push(`<span class="k"><span class="ksw ssw"></span>limited calibration support</span>`);
+  if (S.wpc && S.cyc) keys.push(...[1, 2, 3, 4].map(c => `<span class="k"><span class="kln" style="border-color:${CCOL[c]}"></span>WPC ${CATN[c]}</span>`));
+  if (S.fgl) keys.push(`<span class="k"><span class="kln" style="border-color:${dark ? "#f2f2f2" : "#1d1f22"}"></span>first guess</span>`);
+  if (S.obs && D.obs) keys.push(`<span class="k"><span class="ksw" style="background:${dark ? "#f2f2f2" : "#16191d"};width:9px;height:9px;border-radius:50%"></span>observed</span>`);
+  html += `<div class="keys">${keys.join("")}</div>`;
+  $("legend").innerHTML = html;
+}
+
+function readout(e) {
+  if (!DATA || !DATA.days[S.day]) return;
+  const D = DATA.days[S.day];
+  const iy = Math.round((e.latlng.lat - DATA.lat0) / DATA.dlat), ix = Math.round((e.latlng.lng - DATA.lon0) / DATA.dlon);
+  if (iy < 0 || ix < 0 || iy >= DATA.ny || ix >= DATA.nx) { $("readout").style.display = "none"; return; }
+  const k = iy * DATA.nx + ix, fg = grids.fg[k];
+  if (fg === 255) { $("readout").style.display = "none"; return; }
+  const sec = (title, rows) => rows.length ? `<div class="g">${title}</div><table>${rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join("")}</table>` : "";
+  const out = [["First guess (UFVS scale)", `${fg}%${tag(catOf(fg))}`]];
+  if (grids.pre) out.push(["Model before rule (UFVS scale)", `${grids.pre[k]}%${tag(catOf(grids.pre[k]))}`]);
+  if (grids.cap && grids.cap[k]) out.push([`<span class="rule">Low-CAPE rule</span>`, `<span class="rule">${D.capped.rule === "d2b" ? "limited to Slight" : "capped to 14%"}</span>`]);
+  for (const c of Object.keys(grids.wpc)) out.push([`WPC ${c}`, tag(grids.wpc[c][k])]);
+  const gd = [], hy = [];
+  for (const [key, g] of Object.entries(grids.f)) {
+    if (g[k] === 255) continue;
+    const sp = DATA.specs[key], v = g[k] * sp.s + sp.o;
+    const row = [sp.label.replace(" (Day 1)", "").replace(" (display only)", ""), fmt(sp, v)];
+    (sp.group === "Rainfall guidance" ? gd : sp.group === "Outlook" ? out : hy).push(row);
+  }
+  const ctx = [];
+  if (grids.wet && grids.wet[k] !== 255) ctx.push(["30-day rain", `${(grids.wet[k] / 10).toFixed(1)}x normal (${(grids.wetmm[k] * 2 / 25.4).toFixed(1)}")`]);
+  if (grids.obs) ctx.push(["Verification", grids.obs[k] ? "<b>observed</b>" : `<span class="none">not observed</span>`]);
+  const lat = DATA.lat0 + iy * DATA.dlat, lon = DATA.lon0 + ix * DATA.dlon;
+  let sup = "";
+  const r = grids.sup && grids.sup[k] !== 255 ? D.support.strata[grids.sup[k]] : null;
+  if (r && r.flag) {
+    const pv = grids.pre ? grids.pre[k] : fg, pc = v => `${Math.round(v * 100)}%`;
+    const bin = r.bin >= 0.40 ? "40%+" : r.bin >= 0.25 ? "25-40%" : "15-25%";
+    const seen = r.cells ? `${r.cells} cells on ${r.days} day${r.days === 1 ? "" : "s"} (${r.systems} separate system${r.systems === 1 ? "" : "s"}); `
+      + `official verification (UFVS) observed ${pc(r.obs)}${r.days > 1 ? ` (likely range ${pc(r.lo)}-${pc(r.hi)})` : ""} against the model's ${pc(r.fc)}` : "none";
+    sup = `<div class="sup"><b>Limited calibration support</b>The final calibration step was fitted on forecasts from Jul 2025 - Oct 2026. `
+      + `Similar cells in that sample (${r.area}, ${r.regime}, ${r.season} season, ${bin}): ${seen}.`
+      + (r.above ? ` Today's ${pv}% is above the highest model value in that sample (${pc(r.pmax)}).` : "")
+      + ` This is about the recent calibration sample only: the underlying models were trained on 2002-2024 and likely include comparable weather. `
+      + `Display only: the probability and category are unchanged.</div>`;
+  }
+  $("readout").innerHTML = `<div class="h">Day ${S.day} &middot; ${fmtDate(D.valid, true)}<small>${lat.toFixed(1)}&deg;N ${Math.abs(lon).toFixed(1)}&deg;W</small></div>` +
+    sec("Outlook", out) + sup + sec("Rainfall guidance", gd) + sec("Hydrology & instability", hy) + sec("Context", ctx);
+  $("readout").style.display = "block";
+}
+map.on("mousemove", readout); map.on("click", readout);
+map.on("mouseout", () => { if (!matchMedia("(max-width: 760px)").matches) $("readout").style.display = "none"; });
+
+$("run").onchange = e => { S.run = e.target.value; loadRun(); };
+$("base").onchange = e => { S.base = e.target.value; draw(); };
+for (const k of ["capped", "sup", "fgl", "wpc", "obs"]) $(k).onchange = e => { S[k] = e.target.checked; draw(); };
+$("op").oninput = e => { S.op = +e.target.value; draw(); };
+$("toggle").onclick = () => $("panel").classList.toggle("open");
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "SELECT" || e.target.tagName === "INPUT" || !DATA) return;
+  const ds = Object.keys(DATA.days).map(Number).sort();
+  const i = ds.indexOf(S.day);
+  if (e.key === "ArrowRight" && i < ds.length - 1) { S.day = ds[i + 1]; draw(); }
+  if (e.key === "ArrowLeft" && i > 0) { S.day = ds[i - 1]; draw(); }
+});
+loadRuns().catch(err => { $("built").textContent = "Could not load map data: " + err; });
+</script>
+</body>
+</html>
